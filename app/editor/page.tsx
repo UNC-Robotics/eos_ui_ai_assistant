@@ -1,0 +1,83 @@
+import { EditorClient } from '@/features/editor/components/EditorClient';
+import { getTaskSpecs, getLabSpecs } from '@/lib/api/specs';
+import { scanPackages } from '@/lib/filesystem/operations';
+import type { EntityType } from '@/lib/types/filesystem';
+import type { ParameterSpec } from '@/lib/types/protocol';
+
+export const dynamic = 'force-dynamic';
+
+export const metadata = {
+  title: 'Editor',
+  description: 'Edit EOS packages, protocols, devices, tasks, and labs',
+};
+
+interface EditorPageProps {
+  searchParams: Promise<{
+    pkg?: string;
+    type?: string;
+    name?: string;
+    mode?: string;
+  }>;
+}
+
+export default async function EditorPage({ searchParams }: EditorPageProps) {
+  // Await searchParams
+  const params = await searchParams;
+
+  // Fetch packages and specs in parallel
+  const [packages, taskSpecs, labSpecs] = await Promise.all([scanPackages(), getTaskSpecs(), getLabSpecs()]);
+
+  // Transform task specs for protocol editor (keep existing logic)
+  const taskSpecsArray = Object.entries(taskSpecs).map(([type, spec]) => {
+    const deviceTypes = spec.devices ? Array.from(new Set(Object.values(spec.devices).map((d) => d.type))) : [];
+
+    const transformedDevices = spec.devices
+      ? Object.fromEntries(Object.entries(spec.devices).map(([key, device]) => [key, { type: device.type, desc: '' }]))
+      : undefined;
+
+    const transformedInputResources = spec.input_resources
+      ? Object.fromEntries(
+          Object.entries(spec.input_resources).map(([key, resource]) => [key, { type: resource.type, desc: '' }])
+        )
+      : {};
+
+    const transformedOutputResources = spec.output_resources
+      ? Object.fromEntries(
+          Object.entries(spec.output_resources).map(([key, resource]) => [key, { type: resource.type, desc: '' }])
+        )
+      : {};
+
+    return {
+      type,
+      desc: spec.desc || '',
+      device_types: deviceTypes,
+      packageName: spec.packageName,
+      input_devices: transformedDevices,
+      output_devices: {},
+      input_resources: transformedInputResources,
+      output_resources: transformedOutputResources,
+      input_parameters: (spec.input_parameters as Record<string, ParameterSpec>) || {},
+      output_parameters: (spec.output_parameters as Record<string, ParameterSpec>) || {},
+    };
+  });
+
+  // Prepare initial selection from URL params
+  const initialSelection =
+    params.pkg && params.type && params.name
+      ? {
+          packageName: params.pkg,
+          entityType: params.type as EntityType,
+          entityName: params.name,
+          editorMode: (params.mode as 'code' | 'visual') || undefined,
+        }
+      : undefined;
+
+  return (
+    <EditorClient
+      initialPackages={packages}
+      taskSpecs={taskSpecsArray}
+      labSpecs={labSpecs}
+      initialSelection={initialSelection}
+    />
+  );
+}

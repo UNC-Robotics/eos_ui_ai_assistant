@@ -1,0 +1,88 @@
+import { memo, useState, useEffect } from 'react';
+import { ParameterSpec } from '@/lib/types/protocol';
+import { DescriptionTooltip } from '@/components/ui/DescriptionTooltip';
+import { restoreDefaultIfEmpty } from '@/lib/utils/protocolHelpers';
+import { validateDict } from '@/lib/validation/parameter-validation';
+
+interface DictParameterFieldProps {
+  name: string;
+  spec: ParameterSpec;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}
+
+export const DictParameterField = memo(({ name, spec, value, onChange }: DictParameterFieldProps) => {
+  const [error, setError] = useState<string | undefined>();
+  const [textValue, setTextValue] = useState<string>('');
+
+  // Initialize text value from the actual value
+  useEffect(() => {
+    if (value !== undefined && value !== null) {
+      if (typeof value === 'string') {
+        setTextValue(value);
+      } else {
+        setTextValue(JSON.stringify(value, null, 2));
+      }
+    } else {
+      setTextValue('');
+    }
+  }, [value]);
+
+  // Validate on value change
+  useEffect(() => {
+    if (value !== undefined && value !== null && value !== '') {
+      const validation = validateDict(value, spec);
+      setError(validation.error);
+    } else {
+      setError(undefined);
+    }
+  }, [value, spec]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const rawValue = e.target.value;
+    setTextValue(rawValue);
+
+    if (rawValue === '') {
+      onChange(undefined);
+      return;
+    }
+
+    // Try to parse JSON
+    try {
+      const parsed = JSON.parse(rawValue);
+      onChange(parsed);
+    } catch {
+      // Keep the string value if it's not valid JSON yet
+      onChange(rawValue);
+    }
+  };
+
+  return (
+    <div>
+      <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        {name}
+        <span className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-slate-600 text-[10px] font-medium text-gray-700 dark:text-gray-200">
+          {spec.type}
+        </span>
+        {spec.desc && <DescriptionTooltip description={spec.desc} />}
+      </label>
+
+      <textarea
+        value={textValue}
+        onChange={handleChange}
+        onBlur={() => restoreDefaultIfEmpty(value, spec, onChange)}
+        rows={2}
+        placeholder='{"key": "value"}'
+        className={`w-full px-2.5 py-1 text-sm border rounded-md focus:outline-none focus:ring-2 font-mono ${
+          error
+            ? 'border-red-500 focus:ring-red-500'
+            : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-yellow-500'
+        } bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500`}
+      />
+
+      {error && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{error}</p>}
+    </div>
+  );
+});
+
+DictParameterField.displayName = 'DictParameterField';
